@@ -1,7 +1,6 @@
 import datetime
 import streamlit as st
-from utils.data import listar_series, listar_lecciones
-from utils.data import descargar_material
+from utils.data import listar_series, listar_lecciones, listar_materiales, obtener_contenido_material
 
 st.set_page_config(
     page_title="Príncipe de Paz Jóvenes",
@@ -19,7 +18,7 @@ st.divider()
 
 try:
     series = listar_series()
-except Exception as e:
+except Exception:
     st.error(
         "No se pudo conectar con la base de datos. Si eres el administrador, "
         "revisa que las credenciales de Firebase estén bien configuradas en Secrets."
@@ -53,7 +52,7 @@ else:
                 if leccion.get("descripcion"):
                     st.write(leccion["descripcion"])
 
-                materiales = leccion.get("materiales", [])
+                materiales = listar_materiales(leccion["id"])
                 if materiales:
                     st.write("**Material disponible:**")
                     cols = st.columns(min(len(materiales), 4) or 1)
@@ -64,13 +63,13 @@ else:
                                 st.link_button(f"🔗 {mat['nombre']}", mat["url"], use_container_width=True)
                             else:
                                 try:
-                                    contenido = descargar_material(mat["storage_path"])
+                                    contenido = obtener_contenido_material(mat["id"])
                                     st.download_button(
                                         f"⬇️ {mat['nombre']}",
                                         data=contenido,
                                         file_name=mat["nombre"],
                                         use_container_width=True,
-                                        key=f"dl_{leccion['id']}_{i}",
+                                        key=f"dl_{mat['id']}",
                                     )
                                 except Exception:
                                     st.caption(f"⚠️ No se pudo cargar: {mat['nombre']}")

@@ -1,35 +1,26 @@
 import streamlit as st
 import firebase_admin
-from firebase_admin import credentials, firestore, storage
+from firebase_admin import credentials, firestore
 
 
 @st.cache_resource
 def init_firebase():
-    """Inicializa la conexión con Firebase (Firestore y Storage).
+    """Inicializa la conexión con Firestore.
 
     Lee las credenciales desde st.secrets["firebase"], que debe
     contener el contenido del archivo JSON de la cuenta de servicio
-    de Firebase, más el campo storage_bucket.
+    de Firebase.
     """
     if not firebase_admin._apps:
         secrets = dict(st.secrets["firebase"])
-        storage_bucket = secrets.pop("storage_bucket")
+        # Por si quedó configurado de una versión anterior, lo ignoramos.
+        secrets.pop("storage_bucket", None)
 
         cred = credentials.Certificate(secrets)
-        firebase_admin.initialize_app(cred, {
-            "storageBucket": storage_bucket
-        })
+        firebase_admin.initialize_app(cred)
 
-    db = firestore.client()
-    bucket = storage.bucket()
-    return db, bucket
+    return firestore.client()
 
 
 def get_db():
-    db, _ = init_firebase()
-    return db
-
-
-def get_bucket():
-    _, bucket = init_firebase()
-    return bucket
+    return init_firebase()

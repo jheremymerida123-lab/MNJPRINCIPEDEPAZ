@@ -6,7 +6,9 @@ from utils.auth import (
 from utils.data import (
     crear_serie, listar_series, eliminar_serie,
     crear_leccion, listar_lecciones, eliminar_leccion,
-    agregar_material_archivo, agregar_material_enlace, eliminar_material,
+    agregar_material_archivo, agregar_material_enlace,
+    listar_materiales, eliminar_material,
+    ArchivoDemasiadoGrandeError, LIMITE_ARCHIVO_BYTES,
 )
 
 st.set_page_config(page_title="Panel de administradores", page_icon="🔐", layout="wide")
@@ -126,11 +128,13 @@ with tab_lecciones:
         if not lecciones:
             st.caption("Todavía no hay lecciones en esta serie.")
 
+        limite_kb = LIMITE_ARCHIVO_BYTES // 1024
+
         for leccion in lecciones:
             with st.expander(f"📝 {leccion['nombre']}  ·  {leccion.get('fecha', 'sin fecha')}"):
                 st.write(leccion.get("descripcion", ""))
 
-                st.write("**Subir material (PDF, imagen, presentación, documento):**")
+                st.write(f"**Subir archivo** (PDF, imagen, presentación — máximo {limite_kb} KB):")
                 archivo = st.file_uploader(
                     "Selecciona un archivo",
                     key=f"upload_{leccion['id']}",
@@ -138,13 +142,14 @@ with tab_lecciones:
                 )
                 if archivo is not None:
                     if st.button("Subir archivo", key=f"btn_subir_{leccion['id']}"):
-                        agregar_material_archivo(
-                            leccion["id"], serie_sel_id, archivo.name, archivo.getvalue()
-                        )
-                        st.success("Archivo subido.")
-                        st.rerun()
+                        try:
+                            agregar_material_archivo(leccion["id"], archivo.name, archivo.getvalue())
+                            st.success("Archivo subido.")
+                            st.rerun()
+                        except ArchivoDemasiadoGrandeError as e:
+                            st.error(str(e))
 
-                st.write("**O agregar un enlace (video, audio, Google Drive, YouTube):**")
+                st.write("**O agregar un enlace** (video, audio, Google Drive, YouTube, o un PDF grande):")
                 col1, col2 = st.columns(2)
                 with col1:
                     nombre_enlace = st.text_input("Nombre del enlace", key=f"nombre_enlace_{leccion['id']}")
@@ -158,17 +163,17 @@ with tab_lecciones:
                     else:
                         st.error("Completa el nombre y la URL del enlace.")
 
-                materiales = leccion.get("materiales", [])
+                materiales = listar_materiales(leccion["id"])
                 if materiales:
                     st.write("**Materiales actuales:**")
-                    for i, mat in enumerate(materiales):
+                    for mat in materiales:
                         colm1, colm2 = st.columns([5, 1])
                         with colm1:
                             icono = "🔗" if mat["tipo"] == "enlace" else "📎"
                             st.write(f"{icono} {mat['nombre']}")
                         with colm2:
-                            if st.button("Eliminar", key=f"del_mat_{leccion['id']}_{i}"):
-                                eliminar_material(leccion["id"], i)
+                            if st.button("Eliminar", key=f"del_mat_{mat['id']}"):
+                                eliminar_material(mat["id"])
                                 st.rerun()
 
                 st.markdown("---")

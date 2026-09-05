@@ -1,6 +1,15 @@
+import base64
 import datetime
-import uuid
-from utils.firebase_config import get_db, get_bucket
+from utils.firebase_config import get_db
+
+# Límite de tamaño de archivo. Firestore permite documentos de hasta 1 MiB,
+# y guardar el archivo en base64 le agrega ~33% de peso, así que dejamos
+# margen de seguridad.
+LIMITE_ARCHIVO_BYTES = 700 * 1024  # 700 KB
+
+
+class ArchivoDemasiadoGrandeError(Exception):
+    pass
 
 
 # ---------- SERIES ----------
@@ -28,7 +37,6 @@ def listar_series():
 
 def eliminar_serie(serie_id: str):
     db = get_db()
-    # Elimina también las lecciones de esa serie
     lecciones = db.collection("lecciones").where("serie_id", "==", serie_id).stream()
     for lec in lecciones:
         eliminar_leccion(lec.id)
@@ -44,7 +52,6 @@ def crear_leccion(serie_id: str, nombre: str, fecha: str, descripcion: str, crea
         "nombre": nombre.strip(),
         "fecha": fecha,  # formato ISO: YYYY-MM-DD
         "descripcion": descripcion.strip(),
-        "materiales": [],
         "creado_por": creado_por,
         "fecha_creacion": datetime.datetime.utcnow().isoformat(),
     })
@@ -67,69 +74,63 @@ def listar_lecciones(serie_id: str = None):
 
 def eliminar_leccion(leccion_id: str):
     db = get_db()
-    doc = db.collection("lecciones").document(leccion_id).get()
-    if doc.exists:
-        data = doc.to_dict()
-        bucket = get_bucket()
-        for mat in data.get("materiales", []):
-            if mat.get("tipo") == "archivo" and mat.get("storage_path"):
-                try:
-                    bucket.blob(mat["storage_path"]).delete()
-                except Exception:
-                    pass
+    materiales = db.collection("materiales").where("leccion_id", "==", leccion_id).stream()
+    for mat in materiales:
+        mat.reference.delete()
     db.collection("lecciones").document(leccion_id).delete()
 
 
 # ---------- MATERIALES ----------
+# Se guardan en su propia colección "materiales" (no dentro de la lección)
+# para no exceder el límite de tamaño de un documento de Firestore.
 
-def agregar_material_archivo(leccion_id: str, serie_id: str, nombre_archivo: str, contenido_bytes: bytes):
-    bucket = get_bucket()
-    ext = nombre_archivo.split(".")[-1] if "." in nombre_archivo else ""
-    ruta = f"materiales/{serie_id}/{leccion_id}/{uuid.uuid4().hex}_{nombre_archivo}"
-    blob = bucket.blob(ruta)
-    blob.upload_from_string(contenido_bytes, content_type=None)
-
+def agregar_material_archivo(leccion_id: str, nombre_archivo: str, contenido_bytes: bytes):
+    if len(contenido_bytes) > LIMITE_ARCHIVO_BYTES:
+        raise ArchivoDemasiadoGrandeError(
+            f"El archivo pesa {len(contenido_bytes) / 1024:.0f} KB. "
+            f"El límite es {LIMITE_ARCHIVO_BYTES // 1024} KB. "
+            "Para archivos más grandes (o videos), usa un enlace de Google Drive o YouTube."
+        )
+    contenido_b64 = base64.b64encode(contenido_bytes).decode("utf-8")
     db = get_db()
-    leccion_ref = db.collection("lecciones").document(leccion_id)
-    leccion = leccion_ref.get().to_dict()
-    materiales = leccion.get("materiales", [])
-    materiales.append({
+    db.collection("materiales").add({
+        "leccion_id": leccion_id,
         "nombre": nombre_archivo,
         "tipo": "archivo",
-        "storage_path": ruta,
+        "contenido_b64": contenido_b64,
+        "fecha_creacion": datetime.datetime.utcnow().isoformat(),
     })
-    leccion_ref.update({"materiales": materiales})
 
 
 def agregar_material_enlace(leccion_id: str, nombre: str, url: str):
     db = get_db()
-    leccion_ref = db.collection("lecciones").document(leccion_id)
-    leccion = leccion_ref.get().to_dict()
-    materiales = leccion.get("materiales", [])
-    materiales.append({
+    db.collection("materiales").add({
+        "leccion_id": leccion_id,
         "nombre": nombre.strip(),
         "tipo": "enlace",
         "url": url.strip(),
+        "fecha_creacion": datetime.datetime.utcnow().isoformat(),
     })
-    leccion_ref.update({"materiales": materiales})
 
 
-def eliminar_material(leccion_id: str, indice: int):
+def listar_materiales(leccion_id: str):
     db = get_db()
-    leccion_ref = db.collection("lecciones").document(leccion_id)
-    leccion = leccion_ref.get().to_dict()
-    materiales = leccion.get("materiales", [])
-    if 0 <= indice < len(materiales):
-        mat = materiales.pop(indice)
-        if mat.get("tipo") == "archivo" and mat.get("storage_path"):
-            try:
-                get_bucket().blob(mat["storage_path"]).delete()
-            except Exception:
-                pass
-        leccion_ref.update({"materiales": materiales})
+    materiales = []
+    for doc in db.collection("materiales").where("leccion_id", "==", leccion_id).stream():
+        d = doc.to_dict()
+        d["id"] = doc.id
+        materiales.append(d)
+    materiales.sort(key=lambda m: m.get("fecha_creacion", ""))
+    return materiales
 
 
-def descargar_material(storage_path: str) -> bytes:
-    bucket = get_bucket()
-    blob = bucket.blob(storage_path)
-    return blob.download_as_bytes()
+def eliminar_material(material_id: str):
+    db = get_db()
+    db.collection("materiales").document(material_id).delete()
+
+
+def obtener_contenido_material(material_id: str) -> bytes:
+    db = get_db()
+    doc = db.collection("materiales").document(material_id).get()
+    data = doc.to_dict()
+    return base64.b64decode(data["contenido_b64"])

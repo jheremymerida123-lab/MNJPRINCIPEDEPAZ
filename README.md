@@ -1,32 +1,41 @@
 # Príncipe de Paz Jóvenes — Plataforma de capacitación
 
-Esta es la primera versión del sistema. Incluye:
+Esta versión funciona **solo con Firestore** (gratis, plan Spark), sin necesitar
+Firebase Storage ni tarjeta de crédito.
 
 - **Página pública** (`app.py`): calendario de series y lecciones, con descarga de materiales. Esta es la que compartes por link.
-- **Panel de administradores** (`pages/1_🔐_Panel_Administradores.py`): login, crear series, crear lecciones, subir materiales (archivos o enlaces), y agregar más administradores.
+- **Panel de administradores** (`pages/1_🔐_Panel_Administradores.py`): login, crear series, crear lecciones, subir materiales (archivos pequeños o enlaces), y agregar más administradores.
+
+## Cómo se manejan los materiales
+
+- **Archivos pequeños** (PDF, imágenes, documentos, presentaciones de hasta ~700 KB) se guardan directo en la base de datos (Firestore), sin costo.
+- **Archivos grandes o videos/audios**: se agregan como un **enlace** (por ejemplo, subes el archivo a Google Drive o el video a YouTube, y pegas el link en la plataforma). Esto no tiene límite de tamaño y sigue siendo gratis.
+
+Si en el futuro el grupo crece mucho y quieres subir archivos pesados directo (sin usar enlaces), se puede activar Firebase Storage más adelante — eso sí requeriría el plan Blaze de Firebase (pago por uso, con capa gratuita).
 
 ## Paso 1 — Subir estos archivos a GitHub
 
 1. Ve a tu repositorio: `https://github.com/jheremymerida123-lab/MNJPRINCIPEDEPAZ`
-2. Haz clic en **"uploading an existing file"** (o "Add file" > "Upload files")
-3. Sube **todos** los archivos y carpetas de este proyecto, manteniendo la misma estructura de carpetas (`pages/`, `utils/`, `.streamlit/`)
-4. **IMPORTANTE:** no subas el archivo `.streamlit/secrets.toml.example` con datos reales — ese es solo un ejemplo. Las credenciales reales se configuran directo en Streamlit Cloud (paso 3), nunca en GitHub.
-5. Confirma el commit ("Commit changes")
+2. Sube (o reemplaza) todos los archivos y carpetas de este proyecto, manteniendo la misma estructura (`pages/`, `utils/`)
+3. **IMPORTANTE:** no subas el archivo `.streamlit/secrets.toml.example` con datos reales — es solo un ejemplo. Las credenciales reales se configuran directo en Streamlit Cloud (paso 3), nunca en GitHub.
 
-## Paso 2 — Activar los servicios de Firebase que se usan
+## Paso 2 — Activar Firestore en Firebase
 
-En tu proyecto de Firebase (MNJ-principe-de-paz):
+Si ya lo activaste anteriormente, sáltate este paso.
 
-1. En el menú izquierdo, entra a **"Bases de datos y almacenamiento"** (o busca "Firestore Database") y haz clic en **"Crear base de datos"**. Elige el modo **"Producción"** y la ubicación más cercana (ej. `us-central`).
-2. En el mismo menú, entra a **"Storage"** y haz clic en **"Comenzar"** / "Get started". Acepta las reglas por defecto (las ajustaremos si hace falta).
+1. En tu proyecto de Firebase (MNJ-principe-de-paz), entra a **"Bases de datos y almacenamiento" → "Firestore Database"**
+2. Haz clic en **"Crear base de datos"**, modo **"Producción"**, elige la ubicación más cercana
+3. Espera a que termine de crearse
+
+No necesitas activar Storage.
 
 ## Paso 3 — Obtener las credenciales y configurarlas en Streamlit
 
-1. En Firebase, ve al ícono de engranaje ⚙️ (arriba, junto a "Descripción general") > **"Configuración del proyecto"**
+1. En Firebase, ve al ícono de engranaje ⚙️ > **"Configuración del proyecto"**
 2. Ve a la pestaña **"Cuentas de servicio"**
 3. Haz clic en **"Generar nueva clave privada"** → se descarga un archivo `.json`. Guárdalo, contiene información sensible.
-4. Ve a **share.streamlit.io**, haz clic en **"Create app"** (o "New app"), y selecciona tu repositorio `MNJPRINCIPEDEPAZ`, rama `main`, archivo principal `app.py`
-5. Antes de darle "Deploy" (o después, entrando a **Settings > Secrets** de la app ya creada), pega esto, reemplazando cada valor con el del archivo JSON descargado:
+4. Ve a **share.streamlit.io**, haz clic en **"Create app"**, y selecciona tu repositorio `MNJPRINCIPEDEPAZ`, rama `main`, archivo principal `app.py`
+5. En **Settings > Secrets** de la app, pega esto, reemplazando cada valor con el del archivo JSON descargado:
 
 ```toml
 [firebase]
@@ -40,7 +49,6 @@ auth_uri = "https://accounts.google.com/o/oauth2/auth"
 token_uri = "https://oauth2.googleapis.com/token"
 auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
 client_x509_cert_url = "el-client_x509_cert_url-del-json"
-storage_bucket = "el-project-id.appspot.com"
 ```
 
 6. Guarda los secrets. La app se reiniciará sola con la conexión activa.
@@ -56,13 +64,12 @@ storage_bucket = "el-project-id.appspot.com"
 
 - **Serie** = un tema o unidad (ej. "Amistad con Dios")
 - **Lección** = una sesión dentro de una serie, con su fecha programada
-- **Material** = archivos (PDF, imágenes, presentaciones, documentos) que se suben directo, o enlaces (para videos/audios que conviene alojar en YouTube o Google Drive)
+- **Material** = archivos pequeños que subes directo, o enlaces (para videos/audios o archivos grandes)
 
 ## Siguientes mejoras posibles
 
-Cuando quieras seguir creciendo la plataforma, se le puede agregar:
 - Vista de calendario visual (mes por mes)
 - Notificaciones o recordatorios
 - Categorías por edad
 - Buscador de lecciones
-- Historial y estadísticas de descargas
+- Activar Firebase Storage más adelante si se necesita subir archivos pesados directo
